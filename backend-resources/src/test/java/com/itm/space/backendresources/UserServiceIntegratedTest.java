@@ -1,48 +1,75 @@
 package com.itm.space.backendresources;
 
 import com.itm.space.backendresources.api.request.UserRequest;
-import org.junit.jupiter.api.AfterEach;
+import com.itm.space.backendresources.api.response.UserResponse;
+import com.itm.space.backendresources.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.keycloak.admin.client.Keycloak;
+import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.admin.client.resource.RoleMappingResource;
+import org.keycloak.admin.client.resource.UserResource;
+import org.keycloak.admin.client.resource.UsersResource;
+import org.keycloak.representations.idm.GroupRepresentation;
+import org.keycloak.representations.idm.MappingsRepresentation;
+import org.keycloak.representations.idm.RoleRepresentation;
+import org.keycloak.representations.idm.UserRepresentation;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.boot.test.mock.mockito.MockBean;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import javax.ws.rs.core.Response;
+import java.net.URI;
+import java.util.List;
+import java.util.UUID;
 
-public class UserServiceIntegratedTest extends BaseIntegrationTest {
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
-    private final Keycloak keycloak;
-    private String userId;
+public class UserServiceIntegratedTest extends BaseIntegrationTest{
+
+    private final UserService userService;
 
     @Autowired
-    public UserServiceIntegratedTest(final Keycloak keycloak) {
-        this.keycloak = keycloak;
+    public UserServiceIntegratedTest(UserService userService) {
+        this.userService = userService;
     }
+
+    @MockBean
+    private Keycloak keycloak;
+
+    @MockBean
+    private List<RoleRepresentation> roleRepresentations;
+
+    @MockBean
+    private List<GroupRepresentation> groupRepresentations;
 
     @Test
-    @WithMockUser(roles = "MODERATOR")
-    public void testCreateUser() throws Exception {
-        UserRequest userRequest = new UserRequest
-                ("durak", "durak@lol.com", "durak999", "Lol","Lol");
-        mvc.perform(requestWithContent(post("/api/users"),userRequest))
-                .andExpect(status().isOk());
-        userId = keycloak.realm("ITM").users().search(userRequest.getUsername()).get(0).getId();
+    public void createUserTest() throws Exception {
+        UserRequest userRequest = new UserRequest("user", "user@gmail.com", "user_password", "Username", "Userlastname");
+        Response response = Response.status(Response.Status.CREATED).location(new URI("user_id")).build();
+        when(keycloak.realm(anyString())).thenReturn(mock(RealmResource.class));
+        when(keycloak.realm(anyString()).users()).thenReturn(mock(UsersResource.class));
+        when(keycloak.realm(anyString()).users().create(any())).thenReturn(response);
+        userService.createUser(userRequest);
+        verify(keycloak.realm(anyString()).users(), times(1)).create(any());
     }
-
     @Test
-    @WithMockUser(roles = "MODERATOR")
-    public void testGetUserById() throws Exception {
-        String id = "7c51ccf8-06cf-4388-813b-7dedb4f2ed29";
-        mvc.perform(get("/api/users/" + id))
-                .andExpect(status().isOk());
-    }
+    public void getUserById() {
 
-    @AfterEach
-    public void tearDown() {
-        if (userId != null) {
-            keycloak.realm("ITM").users().get(userId).remove();
-        }
+        UserRepresentation user = new UserRepresentation();
+        UUID id = UUID.randomUUID();
+        user.setId(String.valueOf(id));
+        user.setEmail("user@gmail.com");
+        when(keycloak.realm(anyString())).thenReturn(mock(RealmResource.class));
+        when(keycloak.realm(anyString()).users()).thenReturn(mock(UsersResource.class));
+        when(keycloak.realm(anyString()).users().get(anyString())).thenReturn(mock(UserResource.class));
+        when(keycloak.realm(anyString()).users().get(anyString()).toRepresentation()).thenReturn(user);
+        when(keycloak.realm(anyString()).users().get(anyString()).roles()).thenReturn(mock(RoleMappingResource.class));
+        when(keycloak.realm(anyString()).users().get(anyString()).roles().getAll()).thenReturn(mock(MappingsRepresentation.class));
+        when(keycloak.realm(anyString()).users().get(anyString()).roles().getAll().getRealmMappings()).thenReturn(roleRepresentations);
+        when(keycloak.realm(anyString()).users().get(anyString()).groups()).thenReturn(groupRepresentations);
+        UserResponse response = userService.getUserById(id);
+        assertEquals("user@gmail.com", response.getEmail());
     }
 }
